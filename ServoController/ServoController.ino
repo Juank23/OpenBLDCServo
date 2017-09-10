@@ -108,86 +108,52 @@ void setup()
   Output = 255;
 }
 
-//loop to test rotational speed
+//run loop
 void loop()
 {
-  unsigned long starttime = millis();
-  long timeper = 1000;
-  while (millis() < (starttime + timeper))
+  //troubleshooting stuffs
+  unsigned long counter = 0;
+  unsigned long minCt = 0;
+  unsigned long maxCt = 0;
+  double sumPt = 0;
+  double sumMax = 0;
+  double sumMin = 0;
+  double sumOvr = 0;
+  double sumUdr = 0;
+  double lastEnc = 0;
+  bool risefallFlag = 0;
+
+//  Setpoint *= -1;
+
+  while(counter < 1000)
   {
+    Setpoint += 2;
+    Input = encoderTicks;
+    PIDcompute();
     moveMotor();
+  
+    //loop calculations
+//    sumPt += encoderTicks;
+//    counter++;
+//    if (encoderTicks > Setpoint)
+//      sumOvr += (encoderTicks - Setpoint);
+//    else if (encoderTicks < Setpoint)
+//      sumUdr += (encoderTicks - Setpoint);
+//    if ((risefallFlag) && (encoderTicks < lastEnc))
+//    {
+//      risefallFlag = 0;
+//      sumMax += encoderTicks;
+//      maxCt++;
+//    }
+//    else if ((!risefallFlag) && (encoderTicks > lastEnc))
+//    {
+//      risefallFlag = 1;
+//      sumMin += encoderTicks;
+//      minCt++;
+//    }
+//    lastEnc = encoderTicks;
   }
-  disableMotor();
-  delay(2000);
-  Output *= -1;
-}
-
-//void loop()
-//{
-//  uint16_t cur1 = analogRead(current0);
-//  uint16_t cur2 = analogRead(current1);
-//  uint16_t cur3 = analogRead(current2);
-//  Serial.print(cur1);
-//  Serial.print(", ");
-//  Serial.print(cur2);
-//  Serial.print(", ");
-//  Serial.print(cur3);
-//  Serial.print("\n");
-//}
-
-
-//run loop
-//void loop()
-//{
-//  //troubleshooting stuffs
-//  unsigned long counter = 0;
-//  unsigned long minCt = 0;
-//  unsigned long maxCt = 0;
-//  double sumPt = 0;
-//  double sumMax = 0;
-//  double sumMin = 0;
-//  double sumOvr = 0;
-//  double sumUdr = 0;
-//  double lastEnc = 0;
-//  bool risefallFlag = 0;
-//
-////  Setpoint *= -1;
-//
-//  while(counter < 1000)
-//  {
-//    unsigned long t0, t1;
-//    t0 = micros();
-//    
-//    Setpoint += 2;
-//    Input = encoderTicks;
-//    PIDcompute();
-//    moveMotor();
-//    
-//    t1 = micros();
-//    Serial.println(t1 - t0);
-//  
-//    //loop calculations
-////    sumPt += encoderTicks;
-////    counter++;
-////    if (encoderTicks > Setpoint)
-////      sumOvr += (encoderTicks - Setpoint);
-////    else if (encoderTicks < Setpoint)
-////      sumUdr += (encoderTicks - Setpoint);
-////    if ((risefallFlag) && (encoderTicks < lastEnc))
-////    {
-////      risefallFlag = 0;
-////      sumMax += encoderTicks;
-////      maxCt++;
-////    }
-////    else if ((!risefallFlag) && (encoderTicks > lastEnc))
-////    {
-////      risefallFlag = 1;
-////      sumMin += encoderTicks;
-////      minCt++;
-////    }
-////    lastEnc = encoderTicks;
-//  }
-//  
+  
 //  Serial.print("\n\nAvg value: ");
 //  Serial.println(sumPt / counter);
 //  Serial.print("Avg over: ");
@@ -198,7 +164,7 @@ void loop()
 //  Serial.println(sumMax / maxCt);
 //  Serial.print("Avg trough: ");
 //  Serial.println(sumMin / minCt);
-//}
+}
 
 void moveMotor()
 {
