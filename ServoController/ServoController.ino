@@ -38,8 +38,9 @@
 
 
 //program variables
-#define MAXCURRENT 0.2 //peak rotational current. Actual max current hit may be slightly higher
-
+#define MAXCURRENT 0.7 //peak rotational current. Actual max current hit may be slightly higher
+#define ENC_RESOLUTION 4000 //how many ticks per revolution (actual value, so for quadrature, multiply ticks/rev by 4)
+#define ROLLING_SIZE 5 //size of rolling average for speed calculations
 
 volatile long encoderTicks = 0;
 volatile long stepperTicks = 0;
@@ -91,9 +92,9 @@ void setup()
   attachInterrupt(stepIN, newStep, RISING); 
 
   //PID setup
-  SetOutputLimits(-255, 255);
+  SetOutputLimits(-150, 150); //max speeds in RPM
   PIDinit();
-  SetTunings(20, 1, 10);
+  SetTunings(1, 1, 1);
 
   //faster ADC setup
 //  ADC.begin(analogPin);
@@ -104,71 +105,129 @@ void setup()
   Serial.begin(115200);
 
   //TROUBLESHOOTING
-  Setpoint = 0;
-  Output = 255;
+  Setpoint = 1000;
+//  Output = 20;
+}
+
+//basic loop prototype
+void loop()
+{
+  double rollSpeed[ROLLING_SIZE];
+  double avgSpeed = 0; //average rotational speed
+  uint32_t lastMicro = 0; //last time, for speed calc
+  long lastTick = 0;      //last enc pos, for speed calc
+  uint32_t rollCount = 0;
+
+  //initialize rolling speed array
+  for(uint8_t i = 0; i < ROLLING_SIZE; i++)
+    rollSpeed[i] = 0;
+  
+  while(true)
+  {
+    //setpoint and currentpoint are both known. First PID calculate speed
+    Input = encoderTicks;
+    PIDcompute();
+    updateSpeed(rollSpeed[rollCount], lastMicro, lastTick); //updates current rotational speed
+    rollCount++; //increment rolling count
+    rollCount %= ROLLING_SIZE;
+
+    //calculate average speed
+    avgSpeed = 0;
+    for(uint8_t i = 0; i < ROLLING_SIZE; i++)
+      avgSpeed += rollSpeed[i];
+    avgSpeed /= ROLLING_SIZE;
+
+//    Serial.println(avgSpeed);
+//    Serial.println(Output);
+//    Serial.println(encoderTicks);
+//    Serial.println();
+
+    //move motor
+    moveMotor(avgSpeed);
+    Setpoint++;
+  }
 }
 
 //run loop
-void loop()
+//void loop()
+//{
+//  //troubleshooting and calibration stuffs
+//  unsigned long counter = 0;
+//  unsigned long minCt = 0;
+//  unsigned long maxCt = 0;
+//  double sumPt = 0;
+//  double sumMax = 0;
+//  double sumMin = 0;
+//  double sumOvr = 0;
+//  double sumUdr = 0;
+//  double lastEnc = 0;
+//  bool risefallFlag = 0;
+//
+////  Setpoint *= -1;
+//
+//  while(counter < 1000)
+//  {
+//    Setpoint += 2;
+//    Input = encoderTicks;
+//    PIDcompute();
+//    moveMotor();
+//  
+//    //loop calculations
+////    sumPt += encoderTicks;
+////    counter++;
+////    if (encoderTicks > Setpoint)
+////      sumOvr += (encoderTicks - Setpoint);
+////    else if (encoderTicks < Setpoint)
+////      sumUdr += (encoderTicks - Setpoint);
+////    if ((risefallFlag) && (encoderTicks < lastEnc))
+////    {
+////      risefallFlag = 0;
+////      sumMax += encoderTicks;
+////      maxCt++;
+////    }
+////    else if ((!risefallFlag) && (encoderTicks > lastEnc))
+////    {
+////      risefallFlag = 1;
+////      sumMin += encoderTicks;
+////      minCt++;
+////    }
+////    lastEnc = encoderTicks;
+//  }
+//  
+////  Serial.print("\n\nAvg value: ");
+////  Serial.println(sumPt / counter);
+////  Serial.print("Avg over: ");
+////  Serial.println(sumOvr / counter);
+////  Serial.print("Avg under: ");
+////  Serial.println(sumUdr / counter);
+////  Serial.print("Avg peak: ");
+////  Serial.println(sumMax / maxCt);
+////  Serial.print("Avg trough: ");
+////  Serial.println(sumMin / minCt);
+//}
+
+void updateSpeed(double &curSpeed, uint32_t &lastMicro, long &lastTick)
 {
-  //troubleshooting stuffs
-  unsigned long counter = 0;
-  unsigned long minCt = 0;
-  unsigned long maxCt = 0;
-  double sumPt = 0;
-  double sumMax = 0;
-  double sumMin = 0;
-  double sumOvr = 0;
-  double sumUdr = 0;
-  double lastEnc = 0;
-  bool risefallFlag = 0;
+  long tickDif = encoderTicks - lastTick;
+  uint32_t microDif = micros() - lastMicro;
+  if (microDif < 0)
+    Serial.println("ERROR, LAST MICRO LESS THAN CURRENT MICRO");
 
-//  Setpoint *= -1;
+  curSpeed = tickDif;
+  curSpeed /= ENC_RESOLUTION;
+  curSpeed /= microDif;
+  curSpeed *= 60000000;
 
-  while(counter < 1000)
-  {
-    Setpoint += 2;
-    Input = encoderTicks;
-    PIDcompute();
-    moveMotor();
-  
-    //loop calculations
-//    sumPt += encoderTicks;
-//    counter++;
-//    if (encoderTicks > Setpoint)
-//      sumOvr += (encoderTicks - Setpoint);
-//    else if (encoderTicks < Setpoint)
-//      sumUdr += (encoderTicks - Setpoint);
-//    if ((risefallFlag) && (encoderTicks < lastEnc))
-//    {
-//      risefallFlag = 0;
-//      sumMax += encoderTicks;
-//      maxCt++;
-//    }
-//    else if ((!risefallFlag) && (encoderTicks > lastEnc))
-//    {
-//      risefallFlag = 1;
-//      sumMin += encoderTicks;
-//      minCt++;
-//    }
-//    lastEnc = encoderTicks;
-  }
-  
-//  Serial.print("\n\nAvg value: ");
-//  Serial.println(sumPt / counter);
-//  Serial.print("Avg over: ");
-//  Serial.println(sumOvr / counter);
-//  Serial.print("Avg under: ");
-//  Serial.println(sumUdr / counter);
-//  Serial.print("Avg peak: ");
-//  Serial.println(sumMax / maxCt);
-//  Serial.print("Avg trough: ");
-//  Serial.println(sumMin / minCt);
+  //update history values
+  lastMicro += microDif;
+  lastTick += tickDif;
 }
 
-void moveMotor()
+void moveMotor(const double curSpeed)
 {
   bool reversed = 0;
+  bool overSpeed = 0;
+  double setCurrent = 0;
   correctedOutput = Output;
 
   if (correctedOutput < 0) //check if motor should spin in reverse
@@ -178,12 +237,22 @@ void moveMotor()
   }
 
   int hallState = readHallState(); //get hall position
-
-  if ((lastRev != reversed) || (lastHall != hallState))
+  if ((lastRev != reversed) || (lastHall != hallState)) //determine if coils need to change
     stateChangeFlag = 1;
     
   lastRev = reversed;
   lastHall = hallState;
+
+  //check if current speed is greater than desired. Otherwise, scales current based on deviation from set speed
+  if (((!reversed) && (curSpeed > Output)) || ((reversed) && (curSpeed < Output)))
+    overSpeed = 1;
+  else
+    setCurrent = (1 + fabs(Output - curSpeed)) / 20;
+
+  if (setCurrent >= 1)
+    setCurrent = currentThresh;
+  else
+    setCurrent *= currentThresh;
 
   if (stateChangeFlag) //if change in hall reading or direction, set new coils
   {
@@ -226,23 +295,21 @@ void moveMotor()
       if (state < 0)
         state += 6;
     }
-    setPWM(correctedOutput); //turn on appropriate fets for new coil
+    if (!overSpeed)
+      setCoil(); //turn on appropriate fets for new coil as long as not overspeed
   }
-//NEW CONCEPT
-//make variable max coil current rather than using pwm directly. Maybe this will be better? idk
-  
-  else //otherwise if same coil being used, check for overcurrent. If over, disable. If under, update pwm
+  else //otherwise if same coil being used, check for overcurrent. If over, disable. If under, keep enabled
   {
     uint16_t coilCurrent = readCurrent(); //read current is very slow because analog read sucks
-    if ((coilCurrent > currentThresh) && (!coilGndFlag)) //if current over thresh and previously below, ground all coils to eliminate current flow
+    if (((coilCurrent > setCurrent) || (overSpeed)) && (!coilGndFlag)) //if current over thresh and previously below, or overspeed, ground all coils
     {
-      disableMotor();
-      stateGND();
+      stateGND(); //disable all P channel, enable all N channel
       coilGndFlag = 1;
     }
-    else if (coilGndFlag) //if curret below thresh and was previously above, turn back on and reset flag
+    else if ((coilCurrent < setCurrent) && (!overSpeed) && (coilGndFlag)) //if curret below thresh and was previously above, turn back on and reset flag
     {
-      setPWM(255);
+      disableMotor();
+      setCoil(); 
       coilGndFlag = 0;
     }
   }
@@ -274,34 +341,24 @@ int readHallState()
   return hallState;
 }
 
-void setPWM(double pwmfreq) //set pwm for new active coil
+void setCoil() //set pwm for new active coil
 {
   switch (state)
   {
-    case 0: {state0(pwmfreq);
+    case 0: {state0();
     break;}
-    case 1: {state1(pwmfreq);
+    case 1: {state1();
     break;}
-    case 2: {state2(pwmfreq);
+    case 2: {state2();
     break;}
-    case 3: {state3(pwmfreq);
+    case 3: {state3();
     break;}
-    case 4: {state4(pwmfreq);
+    case 4: {state4();
     break;}
-    case 5: {state5(pwmfreq);
+    case 5: {state5();
     break;}
   }
 }
-
-//void updatePWM(double pwmfreq) //updates pwm for current active mosfet
-//{
-//  if ((state == 0) || (state == 1))
-//    analogWrite(motorN3, pwmfreq);
-//  if ((state == 2) || (state == 3))
-//    analogWrite(motorN2, pwmfreq);
-//  if ((state == 4) || (state == 5))
-//    analogWrite(motorN1, pwmfreq);
-//}
 
 uint16_t readCurrent() //read current for active mosfet
 {
@@ -420,37 +477,37 @@ void newStep()
 }
 
 /* MOSFET STATES */
-void state0(double pwmfreq) //P2N3
+void state0() //P2N3
 {
   PORT->Group[PORTA].OUTSET.reg = (1<<20);
   PORT->Group[PORTA].OUTSET.reg = (1<<19);
 }
 
-void state1(double pwmfreq) //P1N3
+void state1() //P1N3
 {
   PORT->Group[PORTA].OUTSET.reg = (1<<15);
   PORT->Group[PORTA].OUTSET.reg = (1<<19);
 }
 
-void state2(double pwmfreq) //P1N2
+void state2() //P1N2
 {
   PORT->Group[PORTA].OUTSET.reg = (1<<15);
   PORT->Group[PORTA].OUTSET.reg = (1<<16);
 }
 
-void state3(double pwmfreq) //P3N2
+void state3() //P3N2
 {
   PORT->Group[PORTA].OUTSET.reg = (1<<7);
   PORT->Group[PORTA].OUTSET.reg = (1<<16); 
 }
 
-void state4(double pwmfreq) //P3N1
+void state4() //P3N1
 {
   PORT->Group[PORTA].OUTSET.reg = (1<<7);
   PORT->Group[PORTA].OUTSET.reg = (1<<18);
 }
 
-void state5(double pwmfreq) //P2N1
+void state5() //P2N1
 {
   PORT->Group[PORTA].OUTSET.reg = (1<<20);
   PORT->Group[PORTA].OUTSET.reg = (1<<18);
@@ -458,6 +515,10 @@ void state5(double pwmfreq) //P2N1
 
 void stateGND() //N1N2N3
 {
+  PORT->Group[PORTA].OUTCLR.reg = (1<<15);
+  PORT->Group[PORTA].OUTCLR.reg = (1<<20);
+  PORT->Group[PORTA].OUTCLR.reg = (1<<7);
+  delayMicroseconds(1); //small delay here, is it needed?
   PORT->Group[PORTA].OUTSET.reg = (1<<16);
   PORT->Group[PORTA].OUTSET.reg = (1<<18);
   PORT->Group[PORTA].OUTSET.reg = (1<<19);
